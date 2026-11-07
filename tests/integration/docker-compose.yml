@@ -1,0 +1,21 @@
+name: psst-cli-integration
+
+services:
+  redis:
+    image: redis:8.10.2
+    command: redis-server --save "" --appendonly no
+
+  psst:
+    image: ghcr.io/ch0wm3in/psst-secret:${PSST_IMAGE_TAG:-1.5.2}
+    depends_on:
+      - redis
+    environment:
+      SECRET_KEY: integration-tests-only-not-a-real-secret-key-0123456789
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      REDIS_URL: redis://redis:6379/0
+      API_THROTTLE_RATE_ANON: 1000/minute
+      API_THROTTLE_RATE_CREATE: 1000/minute
+      # Console email backend: exercises notify_email without sending mail.
+      PSST_ENABLE_EMAIL: "True"
+    ports:
+      - "127.0.0.1:${PSST_PORT:-18000}:8000"
