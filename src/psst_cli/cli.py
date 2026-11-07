@@ -557,7 +557,9 @@ class Toggle(StrEnum):
 
 @config_app.command("save-requests")
 def set_save_requests(
-    state: Annotated[Toggle, typer.Argument(help="Save new receive requests on this machine.")],
+    state: Annotated[
+        Toggle, typer.Argument(help="Save new receive requests on this machine.")
+    ],
     delete: Annotated[
         bool | None,
         typer.Option(
