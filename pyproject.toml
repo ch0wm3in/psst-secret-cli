@@ -15,7 +15,7 @@ dependencies = [
 psst = "psst_cli.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.11.17,<0.12"]
+requires = ["uv_build>=0.11.17,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
