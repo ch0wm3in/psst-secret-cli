@@ -83,6 +83,21 @@ def test_loopback_login() -> None:
     assert challenge.rstrip(b"=").decode() == params["code_challenge"]
 
 
+def test_loopback_login_opens_browser(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(auth, "launch_browser", opened.append)
+    client = FakeClient()
+    show_url, params = _browser()
+    shown: list[str] = []
+
+    def show(url: str) -> None:
+        shown.append(url)
+        show_url(url)
+
+    auth.login_loopback(client, open_browser=True, show_url=show, timeout=10)  # type: ignore[arg-type]
+    assert opened == shown
+
+
 @pytest.mark.parametrize(
     "reply",
     [{"code": "psstc_abc", "state": "wrong"}, {"error": "access_denied"}],
@@ -161,18 +176,18 @@ def test_is_wsl_off_linux(monkeypatch: pytest.MonkeyPatch) -> None:
     assert auth.is_wsl() is False
 
 
-def test_open_browser_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_launch_browser_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(auth, "is_wsl", lambda: True)
     monkeypatch.setattr(auth.subprocess, "Popen", lambda args, **kw: calls.append(args))
     monkeypatch.setattr(
         auth.webbrowser, "open", lambda url: pytest.fail("webbrowser used on WSL")
     )
-    auth.open_browser("http://x/?a=1&b=2")
+    auth.launch_browser("http://x/?a=1&b=2")
     assert calls == [["cmd.exe", "/c", "start", "http://x/?a=1^&b=2"]]
 
 
-def test_open_browser_wsl_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_launch_browser_wsl_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
 
     def fail(*args: object, **kwargs: object) -> None:
@@ -181,11 +196,11 @@ def test_open_browser_wsl_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(auth, "is_wsl", lambda: True)
     monkeypatch.setattr(auth.subprocess, "Popen", fail)
     monkeypatch.setattr(auth.webbrowser, "open", opened.append)
-    auth.open_browser("http://x/")
+    auth.launch_browser("http://x/")
     assert opened == ["http://x/"]
 
 
-def test_open_browser_not_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_launch_browser_not_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
     monkeypatch.setattr(auth, "is_wsl", lambda: False)
     monkeypatch.setattr(
@@ -194,5 +209,5 @@ def test_open_browser_not_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *a, **kw: pytest.fail("subprocess used off WSL"),
     )
     monkeypatch.setattr(auth.webbrowser, "open", opened.append)
-    auth.open_browser("http://x/?a=1&b=2")
+    auth.launch_browser("http://x/?a=1&b=2")
     assert opened == ["http://x/?a=1&b=2"]
