@@ -125,3 +125,74 @@ def test_config_with_token_is_private(tmp_path: Path) -> None:
     loaded = load_config(path)
     assert loaded.tokens[SERVER].access_token == "psst_x"
     assert not loaded.tokens[SERVER].is_expired()
+
+
+@pytest.mark.parametrize(
+    ("version", "cgroup", "expected"),
+    [
+        ("Linux version 5.15.153.1-microsoft-standard-WSL2", "0::/\n", True),
+        ("Linux version 5.15.153.1-microsoft-standard-WSL2", "0::/docker/abc\n", False),
+        ("Linux version 5.15.153.1-microsoft-standard-WSL2", "0::/lxc/abc\n", False),
+        ("Linux version 6.8.0-45-generic", "0::/\n", False),
+    ],
+    ids=["wsl", "wsl-docker", "wsl-lxc", "linux"],
+)
+def test_is_wsl(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    version: str,
+    cgroup: str,
+    expected: bool,
+) -> None:
+    files = {"/proc/version": version, "/proc/1/cgroup": cgroup}
+    for name, text in files.items():
+        (tmp_path / name.replace("/", "_")).write_text(text)
+    real_open = open
+    monkeypatch.setattr(auth.sys, "platform", "linux")
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda name, *a, **kw: real_open(tmp_path / name.replace("/", "_"), *a, **kw),
+    )
+    assert auth.is_wsl() is expected
+
+
+def test_is_wsl_off_linux(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth.sys, "platform", "darwin")
+    assert auth.is_wsl() is False
+
+
+def test_open_browser_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(auth, "is_wsl", lambda: True)
+    monkeypatch.setattr(auth.subprocess, "Popen", lambda args, **kw: calls.append(args))
+    monkeypatch.setattr(
+        auth.webbrowser, "open", lambda url: pytest.fail("webbrowser used on WSL")
+    )
+    auth.open_browser("http://x/?a=1&b=2")
+    assert calls == [["cmd.exe", "/c", "start", "http://x/?a=1^&b=2"]]
+
+
+def test_open_browser_wsl_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError("cmd.exe")
+
+    monkeypatch.setattr(auth, "is_wsl", lambda: True)
+    monkeypatch.setattr(auth.subprocess, "Popen", fail)
+    monkeypatch.setattr(auth.webbrowser, "open", opened.append)
+    auth.open_browser("http://x/")
+    assert opened == ["http://x/"]
+
+
+def test_open_browser_not_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(auth, "is_wsl", lambda: False)
+    monkeypatch.setattr(
+        auth.subprocess,
+        "Popen",
+        lambda *a, **kw: pytest.fail("subprocess used off WSL"),
+    )
+    monkeypatch.setattr(auth.webbrowser, "open", opened.append)
+    auth.open_browser("http://x/?a=1&b=2")
+    assert opened == ["http://x/?a=1&b=2"]

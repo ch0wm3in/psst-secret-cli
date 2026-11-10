@@ -4,6 +4,8 @@ import base64
 import hashlib
 import hmac
 import secrets
+import subprocess  # nosec B404
+import sys
 import time
 import webbrowser
 from collections.abc import Callable
@@ -26,6 +28,37 @@ _CALLBACK_PAGE = (
 
 class LoginError(PsstError):
     pass
+
+
+def is_wsl() -> bool:
+    """Whether we are running in Windows Subsystem for Linux (and not in a container there)."""
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        with open("/proc/version", encoding="utf-8", errors="replace") as f:
+            proc_version = f.read().lower()
+        with open("/proc/1/cgroup", encoding="utf-8", errors="replace") as f:
+            cgroup = f.read().lower()
+    except OSError:
+        return False
+    in_container = "/docker/" in cgroup or "/lxc/" in cgroup
+    return "microsoft" in proc_version and not in_container
+
+
+def open_browser(url: str) -> None:
+    """Open ``url`` in the user's browser, using the Windows browser under WSL."""
+    if is_wsl():
+        try:
+            subprocess.Popen(  # nosec B603 B607
+                ["cmd.exe", "/c", "start", url.replace("&", "^&")],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            pass
+    webbrowser.open(url)
 
 
 def new_pkce_pair() -> tuple[str, str]:
@@ -112,7 +145,7 @@ def login_loopback(
         url = authorize_url(client.server, redirect_uri, challenge, state, scope)
         show_url(url)
         if open_browser:
-            webbrowser.open(url)
+            open_browser(url)
         result = _wait_for_callback(httpd, timeout)
 
     if not hmac.compare_digest(result.get("state", ""), state):
