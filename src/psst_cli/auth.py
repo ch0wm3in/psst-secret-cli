@@ -45,7 +45,7 @@ def is_wsl() -> bool:
     return "microsoft" in proc_version and not in_container
 
 
-def open_browser(url: str) -> None:
+def launch_browser(url: str) -> None:
     """Open ``url`` in the user's browser, using the Windows browser under WSL."""
     if is_wsl():
         try:
@@ -145,7 +145,7 @@ def login_loopback(
         url = authorize_url(client.server, redirect_uri, challenge, state, scope)
         show_url(url)
         if open_browser:
-            open_browser(url)
+            launch_browser(url)
         result = _wait_for_callback(httpd, timeout)
 
     if not hmac.compare_digest(result.get("state", ""), state):
